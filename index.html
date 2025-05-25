@@ -1,0 +1,113 @@
+<!-- players.html -->
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>إدارة اللاعبين</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-900 text-white p-4 sm:p-6">
+  <h1 class="text-3xl font-bold text-center mb-6">⚽️ إدارة اللاعبين</h1>
+
+  <!-- زر الانتقال لتسجيل الغياب -->
+  <div class="max-w-xl mx-auto mb-6 text-center">
+    <a href="attendnce.html" class="inline-block bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-4 py-2 rounded">
+      📋 تسجيل الغياب
+    </a>
+  </div>
+
+  <div class="max-w-xl mx-auto mb-6 space-y-4">
+    <input id="name" placeholder="اسم اللاعب" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white" />
+    <input id="birthYear" type="number" placeholder="سنة الميلاد" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white" />
+    <select id="paid" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white">
+      <option value="true">دافع ✅</option>
+      <option value="false">غير دافع ❌</option>
+    </select>
+    <button onclick="addPlayer()" class="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-4 py-2 rounded">
+      ➕ إضافة لاعب
+    </button>
+  </div>
+
+  <div class="max-w-xl mx-auto mb-4">
+    <label for="filterYear" class="block text-sm text-gray-300 mb-1">فلترة حسب سنة الميلاد</label>
+    <select id="filterYear" onchange="loadPlayers()" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white">
+      <option value="">عرض الكل</option>
+    </select>
+  </div>
+
+  <div id="playersList" class="space-y-3 max-w-xl mx-auto"></div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAbafGrwwrs0XuswJfk3EpDwTPskfAosOQ",
+      authDomain: "at-system-1f4c8.firebaseapp.com",
+      projectId: "at-system-1f4c8"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function addPlayer() {
+      const name = document.getElementById("name").value.trim();
+      const birthYear = parseInt(document.getElementById("birthYear").value);
+      const paid = document.getElementById("paid").value === "true";
+
+      if (!name || !birthYear) return alert("❗️يجب إدخال الاسم وسنة الميلاد");
+
+      await db.collection("players").add({ name, birthYear, paid });
+      alert("✅ تم إضافة اللاعب");
+      document.getElementById("name").value = "";
+      document.getElementById("birthYear").value = "";
+      loadPlayers();
+      loadFilterYears();
+    }
+
+    async function loadFilterYears() {
+      const select = document.getElementById("filterYear");
+      const snapshot = await db.collection("players").get();
+      const years = new Set();
+      snapshot.forEach(doc => years.add(doc.data().birthYear));
+      select.innerHTML = '<option value="">عرض الكل</option>';
+      [...years].sort().forEach(year => {
+        select.innerHTML += `<option value="${year}">${year}</option>`;
+      });
+    }
+
+    async function loadPlayers() {
+      const container = document.getElementById("playersList");
+      container.innerHTML = "";
+      const year = document.getElementById("filterYear").value;
+      let query = db.collection("players");
+      if (year) query = query.where("birthYear", "==", parseInt(year));
+      const snapshot = await query.get();
+
+      snapshot.forEach(doc => {
+        const player = doc.data();
+        const id = doc.id;
+        const div = document.createElement("div");
+        div.className = "bg-gray-800 p-3 rounded flex justify-between items-center";
+        div.innerHTML = `
+          <div>
+            <div class="font-bold text-lg">👤 ${player.name}</div>
+            <div class="text-sm text-gray-400">مواليد ${player.birthYear} | الدفع: ${player.paid ? "✅" : "❌"}</div>
+          </div>
+          <button onclick="togglePaid('${id}', ${!player.paid})" class="text-sm bg-yellow-500 hover:bg-yellow-600 text-black px-3 py-1 rounded">
+            تغيير الدفع
+          </button>
+        `;
+        container.appendChild(div);
+      });
+    }
+
+    async function togglePaid(id, newPaidStatus) {
+      await db.collection("players").doc(id).update({ paid: newPaidStatus });
+      loadPlayers();
+    }
+
+    loadPlayers();
+    loadFilterYears();
+  </script>
+</body>
+</html>

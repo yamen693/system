@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>تسجيل الغياب</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore-compat.js"></script>
+</head>
+<body class="bg-gray-900 text-white p-4 sm:p-6">
+  <h1 class="text-2xl sm:text-3xl font-bold mb-4 text-center">📅 تسجيل الحضور والغياب</h1>
+
+  <div class="mb-4 max-w-xl mx-auto">
+    <label for="birthYearFilter" class="block text-sm text-gray-300 mb-1">اختر سنة الميلاد</label>
+    <select id="birthYearFilter" onchange="loadPlayers()" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white">
+      <option value="">كل السنوات</option>
+    </select>
+  </div>
+
+  <div class="mb-4 max-w-xl mx-auto">
+    <label for="date" class="block text-sm text-gray-300 mb-1">اختر التاريخ</label>
+    <input id="date" type="date" class="w-full p-2 rounded bg-gray-800 border border-gray-600 text-white">
+  </div>
+
+  <form id="attendanceForm" class="space-y-4 max-w-xl mx-auto"></form>
+
+  <div class="max-w-xl mx-auto space-y-3">
+    <button onclick="submitAttendance()" type="button" class="w-full bg-yellow-500 hover:bg-yellow-600 text-black font-bold px-6 py-2 rounded">
+      💾 حفظ الحضور
+    </button>
+    <button onclick="generateAbsenceReport()" type="button" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold px-6 py-2 rounded">
+      📊 تقرير الغياب
+    </button>
+  </div>
+
+  <script>
+    const firebaseConfig = {
+      apiKey: "AIzaSyAbafGrwwrs0XuswJfk3EpDwTPskfAosOQ",
+      authDomain: "at-system-1f4c8.firebaseapp.com",
+      projectId: "at-system-1f4c8"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.firestore();
+
+    async function loadBirthYears() {
+      const select = document.getElementById("birthYearFilter");
+      const snapshot = await db.collection("players").get();
+      const years = new Set();
+      snapshot.forEach(doc => years.add(doc.data().birthYear));
+      select.innerHTML = '<option value="">كل السنوات</option>';
+      [...years].sort().forEach(year => {
+        select.innerHTML += `<option value="${year}">${year}</option>`;
+      });
+    }
+
+    async function loadPlayers() {
+      const selectedYear = document.getElementById("birthYearFilter").value;
+      const form = document.getElementById("attendanceForm");
+      form.innerHTML = "";
+      let query = db.collection("players");
+      if (selectedYear) query = query.where("birthYear", "==", Number(selectedYear));
+      const snapshot = await query.get();
+
+      snapshot.forEach(doc => {
+        const player = doc.data();
+        const id = doc.id;
+        const div = document.createElement("div");
+        div.className = "bg-gray-800 p-3 rounded";
+        div.innerHTML = `
+          <label class="flex items-center gap-2">
+            <input type="checkbox" id="${id}" class="accent-yellow-500">
+            <div class="flex-1">
+              <div>👤 <strong>${player.name}</strong></div>
+              <div class="text-sm text-gray-400">مواليد: ${player.birthYear} | الدفع: ${player.paid ? '✅' : '❌'}</div>
+              <div id="status-${id}" class="text-sm mt-1 text-yellow-400">اضغط على تقرير الغياب لعرض التفاصيل</div>
+            </div>
+          </label>
+        `;
+        form.appendChild(div);
+      });
+    }
+
+    async function submitAttendance() {
+      const date = document.getElementById("date").value;
+      if (!date) return alert("📅 اختر التاريخ أولاً");
+
+      const selectedYear = document.getElementById("birthYearFilter").value;
+      let query = db.collection("players");
+      if (selectedYear) query = query.where("birthYear", "==", Number(selectedYear));
+      const snapshot = await query.get();
+
+      const currentMonth = new Date(date).toLocaleString("default", { month: "long" });
+
+      const updates = snapshot.docs.map(async doc => {
+        const id = doc.id;
+        const checked = document.getElementById(id).checked;
+        const statusEl = document.getElementById(`status-${id}`);
+        const ref = db.collection("players").doc(id);
+
+        await ref.collection("attendance").add({
+          date,
+          month: currentMonth,
+          status: checked ? "present" : "absent"
+        });
+
+        if (checked) {
+          statusEl.textContent = `✅ تم تسجيل حضور بتاريخ ${date}`;
+          statusEl.className = "text-green-400 text-sm mt-1";
+        } else {
+          statusEl.textContent = `❌ تم تسجيل غياب بتاريخ ${date}`;
+          statusEl.className = "text-red-400 text-sm mt-1";
+        }
+      });
+
+      try {
+        await Promise.all(updates);
+        alert("✅ تم تسجيل الحضور والغياب بنجاح");
+      } catch (error) {
+        console.error("Error saving attendance:", error);
+        alert("❌ حدث خطأ أثناء الحفظ");
+      }
+    }
+
+    async function generateAbsenceReport() {
+      const date = document.getElementById("date").value;
+      if (!date) return alert("📅 اختر التاريخ أولاً");
+
+      const currentMonth = new Date(date).toLocaleString("default", { month: "long" });
+      const selectedYear = document.getElementById("birthYearFilter").value;
+
+      let query = db.collection("players");
+      if (selectedYear) query = query.where("birthYear", "==", Number(selectedYear));
+      const snapshot = await query.get();
+
+      snapshot.forEach(async doc => {
+        const id = doc.id;
+        const statusEl = document.getElementById(`status-${id}`);
+        const ref = db.collection("players").doc(id);
+
+        const attendanceSnapshot = await ref.collection("attendance")
+          .where("month", "==", currentMonth)
+          .get();
+
+        let presentCount = 0;
+        let absentCount = 0;
+        let absentDates = [];
+
+        attendanceSnapshot.forEach(entry => {
+          const data = entry.data();
+          if (data.status === "present") {
+            presentCount++;
+          } else if (data.status === "absent") {
+            absentCount++;
+            absentDates.push(data.date);
+          }
+        });
+
+        let report = `✅ حضور: ${presentCount} يوم / ❌ غياب: ${absentCount} يوم`;
+        if (absentDates.length) {
+          report += `\n🗓️ تواريخ الغياب: ${absentDates.join(", ")}`;
+        }
+
+        statusEl.textContent = report;
+        statusEl.className = absentCount > 2
+          ? "text-yellow-400 font-bold text-sm mt-1"
+          : "text-blue-300 text-sm mt-1";
+      });
+    }
+
+    loadBirthYears();
+    loadPlayers();
+  </script>
+</body>
+</html>
